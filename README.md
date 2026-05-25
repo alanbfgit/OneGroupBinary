@@ -125,4 +125,4 @@ Simon R. (1989). Optimal two-stage designs for phase II clinical trials. *Contro
 
 ## Author
 
-Alan Forsythe — Forsythe Consulting, 2026
+Alan Forsythe — Forsythe and Bear LLC, 2026
