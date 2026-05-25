@@ -339,7 +339,12 @@ server <- function(input, output, session) {
       # Solid elegant continuous density surface area
       geom_area(aes(fill = region), alpha = 0.85) +
       # Prior density overlay
-      geom_line(aes(y = prior_density), color = "grey30", linewidth = 0.9, linetype = "dashed") +
+      geom_line(aes(y = prior_density), color = "grey30", linewidth = 0.9, linetype = "dotted") +
+      annotate("text",
+               x     = x_seq[which.max(prior_y)],
+               y     = max(prior_y) * 1.04,
+               label = sprintf("Prior: Beta(%.1f, %.1f)", input$prior_alpha, input$prior_beta),
+               color = "grey30", size = 3.5, fontface = "italic", vjust = 0) +
       # Precise target baseline reference lines
       geom_vline(xintercept = mle_p, color = "#e67e22", linewidth = 1.1, linetype = "dotted") +
       geom_vline(xintercept = pu, color = "#c0392b", linewidth = 1.0, linetype = "dashed") +
