@@ -123,6 +123,14 @@ Simon R. (1989). Optimal two-stage designs for phase II clinical trials. *Contro
 
 ---
 
+
+## Git Update Note  
+Going forward, whenever we change the code just run these two lines in the terminal to sync:  
+
+git add simon2stage_app_v2.R  
+git commit -m "your message" && git push origin main  
+
+
 ## Author
 
 Alan Forsythe — Forsythe and Bear LLC, 2026
