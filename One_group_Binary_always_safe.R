@@ -256,7 +256,10 @@ ui <- page_sidebar(
           ),
           tags$small(class = "text-muted fst-italic d-block mt-2",
             "H\u2080: p = p\u2080 vs H\u2081: p > p\u2080  (exact binomial test)")
-        )
+        ),
+        card_footer(tags$small(tags$em(
+          "Classical exact binomial test: one-sided p-value and Clopper\u2013Pearson 95% confidence interval."
+        )))
       ),
       card(
         card_header("Results Summary"),
@@ -352,7 +355,10 @@ ui <- page_sidebar(
           ),
           tags$small(class = "text-muted fst-italic d-block mt-2",
             "H\u2080: p = p\u2080 vs H\u2081: p > p\u2080  (exact binomial test)")
-        )
+        ),
+        card_footer(tags$small(tags$em(
+          "Classical exact binomial test: one-sided p-value and Clopper\u2013Pearson 95% confidence interval."
+        )))
       ),
       card(
         full_screen = TRUE,
