@@ -103,6 +103,27 @@ summary_table_df <- function(a, b, n, rate, ci, e, pval, eff_thresh, fut_thresh,
   )
 }
 
+# ── Helper: observed rate threshold that corresponds to an E-value threshold ──
+# For a given n and E threshold, find the observed success count a such that
+# E(a, n-a, p0, p1) = E_thresh. Returns the observed rate a/n.
+# Used to make futility criterion interpretable to users.
+
+rate_for_e_threshold <- function(e_thresh, n, p0, p1) {
+  log_r1 <- log(p1 / p0)
+  log_r0 <- log((1 - p1) / (1 - p0))
+  
+  # E = exp(a * log_r1 + (n-a) * log_r0)
+  # log(E) = a * log_r1 + (n-a) * log_r0
+  # log(E) = a * (log_r1 - log_r0) + n * log_r0
+  # a = (log(E) - n * log_r0) / (log_r1 - log_r0)
+  
+  if (abs(log_r1 - log_r0) < 1e-10) return(NA_real_)  # Degenerate case
+  
+  a_exact <- (log(e_thresh) - n * log_r0) / (log_r1 - log_r0)
+  a_exact <- max(0, min(n, a_exact))
+  a_exact / n
+}
+
 # ── OC simulation (used by Tab 3) ────────────────────────────────────────────
 # Vectorized LR martingale simulator. Returns prob_efficacy, prob_futility,
 # prob_inconclusive, and ESS for a given true p under the design parameters.
@@ -164,6 +185,14 @@ ui <- page_sidebar(
                 min = 0.01, max = 0.20, value = 0.05, step = 0.01),
     numericInput("max_n", "Maximum N", value = 50, min = 10, max = 1000, step = 1),
     hr(),
+    tags$p(tags$strong("Futility Boundary")),
+    numericInput("fut_e", htmltools::HTML("Futility threshold (E \u2264)"),
+                 value = 0.05, min = 0.001, max = 0.50, step = 0.001),
+    tags$small(tags$em(
+      "E-value below which to stop for futility. ",
+      "See 'Equivalent Observed Rate' box below."
+    )),
+    hr(),
     uiOutput("sidebar_boundaries"),
     hr(),
     uiOutput("param_warning")
@@ -219,6 +248,13 @@ ui <- page_sidebar(
         card_header("Results Summary"),
         tableOutput("snap_table"),
         card_footer(uiOutput("snap_footer"))
+      ),
+      accordion(
+        id = "snap_accordion",
+        accordion_panel(
+          htmltools::HTML("One-Sided p-Value Details &nbsp; <span style='font-size: 0.85rem; color: #7f8c8d;'>(click to expand)</span>"),
+          uiOutput("snap_pval_detail")
+        )
       )
     ),
 
@@ -300,6 +336,13 @@ ui <- page_sidebar(
         card_header("Results Summary"),
         tableOutput("seq_table"),
         card_footer(uiOutput("seq_footer"))
+      ),
+      accordion(
+        id = "seq_accordion",
+        accordion_panel(
+          htmltools::HTML("One-Sided p-Value Details &nbsp; <span style='font-size: 0.85rem; color: #7f8c8d;'>(click to expand)</span>"),
+          uiOutput("seq_pval_detail")
+        )
       )
     ),
 
@@ -361,11 +404,22 @@ server <- function(input, output, session) {
 
   output$sidebar_boundaries <- renderUI({
     eff <- 1 / input$alpha
-    fut <- input$alpha
+    fut <- input$fut_e
+    
+    # Compute equivalent observed rates at key sample sizes
+    rates_at_n <- data.frame(
+      n = c(10, 20, 30, input$max_n),
+      rate = NA_real_
+    )
+    for (i in seq_len(nrow(rates_at_n))) {
+      rates_at_n$rate[i] <- rate_for_e_threshold(fut, rates_at_n$n[i], input$p0, input$p1)
+    }
+    rates_at_n <- rates_at_n[!is.na(rates_at_n$rate), ]
+    
     tagList(
       tags$p(tags$strong("Stopping Boundaries")),
       tags$table(
-        class = "table table-sm table-borderless mb-0",
+        class = "table table-sm table-borderless mb-2",
         tags$tbody(
           tags$tr(
             tags$td(class = "text-muted small pe-3",
@@ -377,6 +431,19 @@ server <- function(input, output, session) {
                     htmltools::HTML("Futility &nbsp;(E \u2264)")),
             tags$td(tags$strong(sprintf("%.4f", fut)))
           )
+        )
+      ),
+      tags$p(tags$strong("Equivalent Observed Rate (Futility)"), style = "font-size: 0.85rem; margin-top: 0.5rem;"),
+      tags$table(
+        class = "table table-sm table-borderless mb-0",
+        style = "font-size: 0.8rem;",
+        tags$tbody(
+          lapply(seq_len(nrow(rates_at_n)), function(i) {
+            tags$tr(
+              tags$td(class = "text-muted pe-2", sprintf("At n = %d:", rates_at_n$n[i])),
+              tags$td(tags$strong(sprintf("%.1f%%", 100 * rates_at_n$rate[i])))
+            )
+          })
         )
       )
     )
@@ -404,7 +471,7 @@ server <- function(input, output, session) {
     pval       <- exact_pval(a, n, p0)
     ci         <- exact_ci(a, n)
     eff_thresh <- 1 / al
-    fut_thresh <- al
+    fut_thresh <- input$fut_e
     dec        <- make_decision(e, n, eff_thresh, fut_thresh, input$max_n)
 
     list(a = a, b = b, n = n, rate = rate, e = e, pval = pval, ci = ci,
@@ -435,10 +502,58 @@ server <- function(input, output, session) {
       "E-value: LR martingale = (p\u2081/p\u2080)<sup>a</sup>",
       " &times; ((1&minus;p\u2081)/(1&minus;p\u2080))<sup>b</sup>. &ensp;",
       "95% CI: Clopper&ndash;Pearson exact. &ensp;",
-      "p-value: one-sided exact binomial test",
-      " (H\u2080: p = p\u2080 vs H\u2081: p &gt; p\u2080). &ensp;",
       "1/E is the minimum \u03b1 at which you would reject H\u2080 with the current data."
     )))
+  })
+
+  output$snap_pval_detail <- renderUI({
+    s <- snap()
+    tagList(
+      tags$h6("What is this?", class = "fw-bold mt-3 mb-2"),
+      tags$p(
+        "The one-sided p-value is the probability of observing ",
+        tags$strong(sprintf("%d or more", s$a)),
+        " successes if the true response rate were exactly ",
+        tags$strong(sprintf("p\u2080 = %.2f%%", 100 * input$p0)),
+        ". It is a classical hypothesis test (exact binomial test) with:",
+        tags$br(),
+        "Null hypothesis: p = p\u2080", tags$br(),
+        "Alternative hypothesis: p > p\u2080"
+      ),
+      tags$h6("Interpretation", class = "fw-bold mt-3 mb-2"),
+      tags$ul(
+        tags$li(
+          tags$strong("Very small p-value (e.g., < 0.001):"),
+          " Strong evidence against the null. Your data are unlikely if the null were true."
+        ),
+        tags$li(
+          tags$strong("Moderate p-value (e.g., 0.01\u20130.05):"),
+          " Suggestive evidence against the null, consistent with the E-value approach."
+        ),
+        tags$li(
+          tags$strong("Large p-value (e.g., > 0.10):"),
+          " Weak evidence against the null. The data are consistent with p = p\u2080."
+        )
+      ),
+      tags$h6("How does it relate to the E-value?", class = "fw-bold mt-3 mb-2"),
+      tags$p(
+        "Both the p-value and E-value measure evidence against H\u2080, but differently:",
+        tags$br(),
+        tags$strong("E-value:"),
+        " A likelihood ratio that can be computed sequentially and remains valid even if you peek at data multiple times.",
+        tags$br(),
+        tags$strong("p-value:"),
+        " A classical fixed-sample test. It is straightforward to interpret but does not permit peeking without inflating Type I error.",
+        tags$br(), tags$br(),
+        "At a given sample size, a smaller p-value and a larger E-value both indicate stronger evidence."
+      ),
+      tags$h6("Confidence Interval", class = "fw-bold mt-3 mb-2"),
+      tags$p(
+        "The 95% confidence interval (Clopper\u2013Pearson exact) gives a range of response rates ",
+        "that are consistent with your observed data. If the interval excludes p\u2080, that is mild evidence ",
+        "against the null."
+      )
+    )
   })
 
   # ── Tab 2: Sequential ──────────────────────────────────────────────────────
@@ -510,7 +625,7 @@ server <- function(input, output, session) {
     b          <- traj$cum_b[n]
     e          <- traj$e[n]
     eff_thresh <- 1 / input$alpha
-    fut_thresh <- input$alpha
+    fut_thresh <- input$fut_e
 
     first_eff <- { idx <- which(traj$e >= eff_thresh); if (length(idx)) min(idx) else NA_integer_ }
     first_fut <- { idx <- which(traj$e <= fut_thresh); if (length(idx)) min(idx) else NA_integer_ }
@@ -630,10 +745,58 @@ server <- function(input, output, session) {
       "E-value: LR martingale = (p\u2081/p\u2080)<sup>a</sup>",
       " &times; ((1&minus;p\u2081)/(1&minus;p\u2080))<sup>b</sup>. &ensp;",
       "95% CI: Clopper&ndash;Pearson exact. &ensp;",
-      "p-value: one-sided exact binomial test",
-      " (H\u2080: p = p\u2080 vs H\u2081: p &gt; p\u2080). &ensp;",
       "1/E is the minimum \u03b1 at which you would reject H\u2080 with the current data."
     )))
+  })
+
+  output$seq_pval_detail <- renderUI({
+    s <- seq_sum()
+    tagList(
+      tags$h6("What is this?", class = "fw-bold mt-3 mb-2"),
+      tags$p(
+        "The one-sided p-value is the probability of observing ",
+        tags$strong(sprintf("%d or more", s$a)),
+        " successes if the true response rate were exactly ",
+        tags$strong(sprintf("p\u2080 = %.2f%%", 100 * input$p0)),
+        ". It is a classical hypothesis test (exact binomial test) with:",
+        tags$br(),
+        "Null hypothesis: p = p\u2080", tags$br(),
+        "Alternative hypothesis: p > p\u2080"
+      ),
+      tags$h6("Interpretation", class = "fw-bold mt-3 mb-2"),
+      tags$ul(
+        tags$li(
+          tags$strong("Very small p-value (e.g., < 0.001):"),
+          " Strong evidence against the null. Your data are unlikely if the null were true."
+        ),
+        tags$li(
+          tags$strong("Moderate p-value (e.g., 0.01\u20130.05):"),
+          " Suggestive evidence against the null, consistent with the E-value approach."
+        ),
+        tags$li(
+          tags$strong("Large p-value (e.g., > 0.10):"),
+          " Weak evidence against the null. The data are consistent with p = p\u2080."
+        )
+      ),
+      tags$h6("How does it relate to the E-value?", class = "fw-bold mt-3 mb-2"),
+      tags$p(
+        "Both the p-value and E-value measure evidence against H\u2080, but differently:",
+        tags$br(),
+        tags$strong("E-value:"),
+        " A likelihood ratio that can be computed sequentially and remains valid even if you peek at data multiple times.",
+        tags$br(),
+        tags$strong("p-value:"),
+        " A classical fixed-sample test. It is straightforward to interpret but does not permit peeking without inflating Type I error.",
+        tags$br(), tags$br(),
+        "At a given sample size, a smaller p-value and a larger E-value both indicate stronger evidence."
+      ),
+      tags$h6("Confidence Interval", class = "fw-bold mt-3 mb-2"),
+      tags$p(
+        "The 95% confidence interval (Clopper\u2013Pearson exact) gives a range of response rates ",
+        "that are consistent with your observed data. If the interval excludes p\u2080, that is mild evidence ",
+        "against the null."
+      )
+    )
   })
 
   # ── Tab 3: Operating Characteristics ────────────────────────────────────────
@@ -690,8 +853,8 @@ server <- function(input, output, session) {
         )
       ),
       tags$small(class = "text-muted fst-italic",
-                 sprintf("Nominal \u03b1 = %.2f  |  boundary = 1/\u03b1 = %.2f",
-                         input$alpha, 1 / input$alpha))
+                 sprintf("Efficacy boundary = 1/\u03b1 = %.2f  |  Futility boundary = E \u2264 %.4f",
+                         1 / input$alpha, input$fut_e))
     )
   })
 
@@ -712,7 +875,8 @@ server <- function(input, output, session) {
         )
       ),
       tags$small(class = "text-muted fst-italic",
-                 sprintf("Futility threshold = \u03b1 = %.2f", input$alpha))
+                 sprintf("Efficacy boundary = 1/\u03b1 = %.2f  |  Futility boundary = E \u2264 %.4f",
+                         1 / input$alpha, input$fut_e))
     )
   })
 
