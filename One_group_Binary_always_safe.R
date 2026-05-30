@@ -226,13 +226,19 @@ ui <- page_sidebar(
           theme    = "primary"
         ),
         value_box(
-          title    = "E-Value",
-          value    = textOutput("snap_e"),
-          showcase = bsicons::bs_icon("lightning-charge"),
+          title    = htmltools::HTML("95% CI (Clopper&ndash;Pearson)"),
+          value    = textOutput("snap_ci"),
+          showcase = bsicons::bs_icon("bar-chart"),
           theme    = "info"
         ),
         value_box(
-          title    = htmltools::HTML("1/E &nbsp;(min \u03b1 to reject)"),
+          title    = "E-Value",
+          value    = textOutput("snap_e"),
+          showcase = bsicons::bs_icon("lightning-charge"),
+          theme    = "warning"
+        ),
+        value_box(
+          title    = htmltools::HTML("1/E &nbsp;(min \u03b1)"),
           value    = textOutput("snap_inv_e"),
           showcase = bsicons::bs_icon("shield-check"),
           theme    = "secondary"
@@ -308,13 +314,19 @@ ui <- page_sidebar(
           theme    = "primary"
         ),
         value_box(
-          title    = "Final E-Value",
-          value    = textOutput("seq_e"),
-          showcase = bsicons::bs_icon("lightning-charge"),
+          title    = htmltools::HTML("95% CI (Clopper&ndash;Pearson)"),
+          value    = textOutput("seq_ci"),
+          showcase = bsicons::bs_icon("bar-chart"),
           theme    = "info"
         ),
         value_box(
-          title    = htmltools::HTML("1/E &nbsp;(min \u03b1 to reject)"),
+          title    = "Final E-Value",
+          value    = textOutput("seq_e"),
+          showcase = bsicons::bs_icon("lightning-charge"),
+          theme    = "warning"
+        ),
+        value_box(
+          title    = htmltools::HTML("1/E &nbsp;(min \u03b1)"),
           value    = textOutput("seq_inv_e"),
           showcase = bsicons::bs_icon("shield-check"),
           theme    = "secondary"
@@ -482,6 +494,10 @@ server <- function(input, output, session) {
     s <- snap()
     if (is.na(s$rate)) "\u2014" else sprintf("%.1f%%", 100 * s$rate)
   })
+  output$snap_ci    <- renderText({
+    s <- snap()
+    if (any(is.na(s$ci))) "\u2014" else sprintf("(%.3f, %.3f)", s$ci[1], s$ci[2])
+  })
   output$snap_e     <- renderText({ sprintf("%.4f", snap()$e) })
   output$snap_inv_e <- renderText({ sprintf("%.4f", 1 / snap()$e) })
   output$snap_pval  <- renderText({ fmt_pval(snap()$pval) })
@@ -641,6 +657,10 @@ server <- function(input, output, session) {
   })
 
   output$seq_rate   <- renderText({ s <- seq_sum(); sprintf("%.1f%%", 100 * s$rate) })
+  output$seq_ci     <- renderText({
+    s <- seq_sum()
+    if (any(is.na(s$ci))) "\u2014" else sprintf("(%.3f, %.3f)", s$ci[1], s$ci[2])
+  })
   output$seq_e      <- renderText({ sprintf("%.4f", seq_sum()$e) })
   output$seq_inv_e  <- renderText({ sprintf("%.4f", 1 / seq_sum()$e) })
   output$seq_pval   <- renderText({ fmt_pval(seq_sum()$pval) })
