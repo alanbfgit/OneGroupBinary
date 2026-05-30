@@ -103,6 +103,50 @@ summary_table_df <- function(a, b, n, rate, ci, e, pval, eff_thresh, fut_thresh,
   )
 }
 
+# ── OC simulation (used by Tab 3) ────────────────────────────────────────────
+# Vectorized LR martingale simulator. Returns prob_efficacy, prob_futility,
+# prob_inconclusive, and ESS for a given true p under the design parameters.
+
+simulate_e_oc <- function(true_p, p0, p1, alpha, max_n, n_sims = 5000) {
+  eff_thresh <- 1 / alpha
+  fut_thresh <- alpha
+  log_r1     <- log(p1 / p0)
+  log_r0     <- log((1 - p1) / (1 - p0))
+
+  obs <- matrix(rbinom(n_sims * max_n, 1L, true_p), nrow = n_sims, ncol = max_n)
+
+  # Row-wise cumulative log E-values via column scan (avoids slow apply)
+  log_e <- obs * log_r1 + (1L - obs) * log_r0
+  for (j in 2:max_n) log_e[, j] <- log_e[, j - 1L] + log_e[, j]
+  e_mat <- exp(log_e)
+
+  # First column where each row crosses a boundary
+  cross_first <- function(bool_mat) {
+    result <- rep(max_n + 1L, nrow(bool_mat))
+    for (j in seq_len(ncol(bool_mat))) {
+      pending <- result > max_n
+      if (!any(pending)) break
+      result[pending & bool_mat[, j]] <- j
+    }
+    result
+  }
+
+  first_eff <- cross_first(e_mat >= eff_thresh)
+  first_fut <- cross_first(e_mat <= fut_thresh)
+
+  eff_win <- first_eff < first_fut
+  fut_win <- first_fut < first_eff
+  stop_n  <- pmin(first_eff, first_fut)
+  stop_n[stop_n > max_n] <- max_n
+
+  list(
+    prob_efficacy     = mean(eff_win),
+    prob_futility     = mean(fut_win),
+    prob_inconclusive = mean(!eff_win & !fut_win),
+    ess               = mean(stop_n)
+  )
+}
+
 # ── UI ────────────────────────────────────────────────────────────────────────
 
 ui <- page_sidebar(
@@ -256,6 +300,52 @@ ui <- page_sidebar(
         card_header("Results Summary"),
         tableOutput("seq_table"),
         card_footer(uiOutput("seq_footer"))
+      )
+    ),
+
+    # ── Tab 3: Operating Characteristics ──────────────────────────────────────
+    nav_panel(
+      "Operating Characteristics",
+
+      layout_column_wrap(
+        width = 1/3, fill = FALSE,
+        card(
+          card_header("Simulation Settings"),
+          card_body(
+            sliderInput("oc_sims", "Simulations per p value",
+                        min = 1000, max = 20000, value = 5000, step = 1000),
+            tags$small(tags$em(
+              "5,000 is sufficient for smooth display. ",
+              "Increase for publication-quality precision."
+            )),
+            tags$br(), tags$br(),
+            actionButton("oc_run", "Run OC Simulation",
+                         class = "btn-primary w-100", icon = icon("play"))
+          )
+        ),
+        card(
+          card_header(htmltools::HTML("At p\u2080 (under H\u2080)")),
+          card_body(uiOutput("oc_h0_summary"))
+        ),
+        card(
+          card_header(htmltools::HTML("At p\u2081 (under H\u2081)")),
+          card_body(uiOutput("oc_h1_summary"))
+        )
+      ),
+
+      layout_column_wrap(
+        width = 1/2,
+        card(
+          full_screen = TRUE,
+          card_header("Decision Probabilities vs. True Response Rate"),
+          plotOutput("oc_plot_probs", height = "400px"),
+          card_footer(uiOutput("oc_plot_footer"))
+        ),
+        card(
+          full_screen = TRUE,
+          card_header("Expected Sample Size vs. True Response Rate"),
+          plotOutput("oc_plot_ess", height = "400px")
+        )
       )
     )
   )
@@ -542,6 +632,188 @@ server <- function(input, output, session) {
       " (H\u2080: p = p\u2080 vs H\u2081: p &gt; p\u2080). &ensp;",
       "1/E is the minimum \u03b1 at which you would reject H\u2080 with the current data."
     )))
+  })
+
+  # ── Tab 3: Operating Characteristics ────────────────────────────────────────
+
+  oc_results <- eventReactive(input$oc_run, {
+    req(input$p1 > input$p0)
+
+    p0    <- input$p0
+    p1    <- input$p1
+    al    <- input$alpha
+    max_n <- input$max_n
+    n_s   <- input$oc_sims
+
+    # Grid spanning from below p0 to above p1; always include p0 and p1 exactly
+    p_lo   <- max(0.02, p0 - 0.15)
+    p_hi   <- min(0.97, p1 + 0.15)
+    p_grid <- sort(unique(c(seq(p_lo, p_hi, by = 0.025), p0, p1)))
+
+    withProgress(message = "Simulating OC curves \u2014 please wait...", value = 0, {
+      rows <- lapply(seq_along(p_grid), function(i) {
+        incProgress(1 / length(p_grid),
+                    detail = sprintf("p = %.3f  (%d / %d)", p_grid[i], i, length(p_grid)))
+        res <- simulate_e_oc(p_grid[i], p0, p1, al, max_n, n_sims = n_s)
+        data.frame(
+          true_p            = p_grid[i],
+          prob_efficacy     = res$prob_efficacy,
+          prob_futility     = res$prob_futility,
+          prob_inconclusive = res$prob_inconclusive,
+          ess               = res$ess
+        )
+      })
+    })
+
+    do.call(rbind, rows)
+  })
+
+  # Helper: extract row nearest to a target p value
+  oc_at <- function(df, p_val) df[which.min(abs(df$true_p - p_val)), ]
+
+  # Summary at p0
+  output$oc_h0_summary <- renderUI({
+    row <- oc_at(oc_results(), input$p0)
+    mk  <- function(label, val)
+      tags$tr(tags$td(class = "text-muted small pe-3", label),
+               tags$td(tags$strong(val)))
+    tagList(
+      tags$table(
+        class = "table table-sm table-borderless mb-1",
+        tags$tbody(
+          mk("Type I Error",      sprintf("%.4f", row$prob_efficacy)),
+          mk("P(futility stop)",  sprintf("%.4f", row$prob_futility)),
+          mk("P(inconclusive)",   sprintf("%.4f", row$prob_inconclusive)),
+          mk("E[N]",              sprintf("%.1f",  row$ess))
+        )
+      ),
+      tags$small(class = "text-muted fst-italic",
+                 sprintf("Nominal \u03b1 = %.2f  |  boundary = 1/\u03b1 = %.2f",
+                         input$alpha, 1 / input$alpha))
+    )
+  })
+
+  # Summary at p1
+  output$oc_h1_summary <- renderUI({
+    row <- oc_at(oc_results(), input$p1)
+    mk  <- function(label, val)
+      tags$tr(tags$td(class = "text-muted small pe-3", label),
+               tags$td(tags$strong(val)))
+    tagList(
+      tags$table(
+        class = "table table-sm table-borderless mb-1",
+        tags$tbody(
+          mk("Power",             sprintf("%.4f", row$prob_efficacy)),
+          mk("P(futility stop)",  sprintf("%.4f", row$prob_futility)),
+          mk("P(inconclusive)",   sprintf("%.4f", row$prob_inconclusive)),
+          mk("E[N]",              sprintf("%.1f",  row$ess))
+        )
+      ),
+      tags$small(class = "text-muted fst-italic",
+                 sprintf("Futility threshold = \u03b1 = %.2f", input$alpha))
+    )
+  })
+
+  # Decision probabilities plot
+  output$oc_plot_probs <- renderPlot({
+    df   <- oc_results()
+    p0   <- input$p0
+    p1   <- input$p1
+
+    # Reshape to long for ggplot
+    long <- rbind(
+      data.frame(true_p = df$true_p, prob = df$prob_efficacy,
+                 outcome = "Efficacy (reject H\u2080)"),
+      data.frame(true_p = df$true_p, prob = df$prob_futility,
+                 outcome = "Futility stop"),
+      data.frame(true_p = df$true_p, prob = df$prob_inconclusive,
+                 outcome = "Inconclusive at max N")
+    )
+    long$outcome <- factor(long$outcome,
+                           levels = c("Efficacy (reject H\u2080)",
+                                      "Futility stop",
+                                      "Inconclusive at max N"))
+
+    cols <- c("Efficacy (reject H\u2080)" = "#1e8449",
+              "Futility stop"             = "#c0392b",
+              "Inconclusive at max N"     = "#7f8c8d")
+
+    ggplot(long, aes(x = true_p, y = prob, color = outcome)) +
+      geom_vline(xintercept = p0, color = "grey40", linewidth = 0.7, linetype = "dashed") +
+      geom_vline(xintercept = p1, color = "grey40", linewidth = 0.7, linetype = "dashed") +
+      annotate("text", x = p0, y = 1.02, label = sprintf("p\u2080 = %.2f", p0),
+               hjust = 0.5, vjust = 0, color = "grey30", size = 3.5) +
+      annotate("text", x = p1, y = 1.02, label = sprintf("p\u2081 = %.2f", p1),
+               hjust = 0.5, vjust = 0, color = "grey30", size = 3.5) +
+      geom_line(linewidth = 1.2) +
+      geom_point(size = 2, alpha = 0.7) +
+      scale_color_manual(values = cols, name = NULL) +
+      scale_x_continuous(labels = scales::label_percent(accuracy = 1)) +
+      scale_y_continuous(labels = scales::label_percent(accuracy = 1),
+                         limits = c(0, 1.08), breaks = seq(0, 1, by = 0.2)) +
+      labs(
+        x       = "True Response Rate (p)",
+        y       = "Probability",
+        caption = sprintf(
+          "LR Martingale  |  p\u2080 = %.2f, p\u2081 = %.2f  |  \u03b1 = %.2f  |  N = %d  |  %s sims per point",
+          p0, p1, input$alpha, input$max_n,
+          formatC(input$oc_sims, format = "d", big.mark = ",")
+        )
+      ) +
+      theme_minimal(base_size = 13) +
+      theme(legend.position   = "bottom",
+            panel.grid.minor  = element_blank(),
+            plot.caption      = element_text(color = "grey50"))
+  })
+
+  output$oc_plot_footer <- renderUI({
+    tags$small(tags$em(
+      "Green = probability of declaring efficacy (= Type I error under p\u2080, power under p\u2081). ",
+      "Red = probability of stopping for futility. ",
+      "Grey = probability of reaching maximum N without a decision."
+    ))
+  })
+
+  # ESS plot
+  output$oc_plot_ess <- renderPlot({
+    df    <- oc_results()
+    p0    <- input$p0
+    p1    <- input$p1
+    max_n <- input$max_n
+
+    ggplot(df, aes(x = true_p, y = ess)) +
+      geom_hline(yintercept = max_n, color = "grey60",
+                 linewidth = 0.6, linetype = "dotted") +
+      geom_vline(xintercept = p0, color = "grey40",
+                 linewidth = 0.7, linetype = "dashed") +
+      geom_vline(xintercept = p1, color = "grey40",
+                 linewidth = 0.7, linetype = "dashed") +
+      annotate("text", x = p0, y = max_n * 1.02,
+               label = sprintf("p\u2080 = %.2f", p0),
+               hjust = 0.5, vjust = 0, color = "grey30", size = 3.5) +
+      annotate("text", x = p1, y = max_n * 1.02,
+               label = sprintf("p\u2081 = %.2f", p1),
+               hjust = 0.5, vjust = 0, color = "grey30", size = 3.5) +
+      annotate("text", x = min(df$true_p), y = max_n,
+               label = sprintf("Max N = %d", max_n),
+               hjust = 0, vjust = -0.4, color = "grey50", size = 3.2) +
+      geom_line(color = "#2980b9", linewidth = 1.2) +
+      geom_point(color = "#2980b9", size = 2, alpha = 0.7) +
+      scale_x_continuous(labels = scales::label_percent(accuracy = 1)) +
+      scale_y_continuous(limits = c(0, max_n * 1.08),
+                         breaks = scales::pretty_breaks(n = 6)) +
+      labs(
+        x       = "True Response Rate (p)",
+        y       = "Expected Sample Size  E[N]",
+        caption = sprintf(
+          "LR Martingale  |  p\u2080 = %.2f, p\u2081 = %.2f  |  \u03b1 = %.2f  |  N = %d  |  %s sims per point",
+          p0, p1, input$alpha, input$max_n,
+          formatC(input$oc_sims, format = "d", big.mark = ",")
+        )
+      ) +
+      theme_minimal(base_size = 13) +
+      theme(panel.grid.minor = element_blank(),
+            plot.caption     = element_text(color = "grey50"))
   })
 }
 
