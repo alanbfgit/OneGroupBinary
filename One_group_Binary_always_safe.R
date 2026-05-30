@@ -338,13 +338,15 @@ ui <- page_sidebar(
         card(
           full_screen = TRUE,
           card_header("Decision Probabilities vs. True Response Rate"),
-          plotOutput("oc_plot_probs", height = "400px"),
-          card_footer(uiOutput("oc_plot_footer"))
+          plotOutput("oc_plot_probs"),
+          card_footer(uiOutput("oc_plot_footer")),
+          style = "min-height: 420px;"
         ),
         card(
           full_screen = TRUE,
           card_header("Expected Sample Size vs. True Response Rate"),
-          plotOutput("oc_plot_ess", height = "400px")
+          plotOutput("oc_plot_ess"),
+          style = "min-height: 420px;"
         )
       )
     )
