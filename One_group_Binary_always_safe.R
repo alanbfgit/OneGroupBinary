@@ -218,18 +218,12 @@ ui <- page_sidebar(
         )
       ),
       layout_column_wrap(
-        width = 1/4, fill = FALSE,
+        width = 1/3, fill = FALSE,
         value_box(
           title    = "Observed Rate",
           value    = textOutput("snap_rate"),
           showcase = bsicons::bs_icon("percent"),
           theme    = "primary"
-        ),
-        value_box(
-          title    = htmltools::HTML("95% CI (Clopper&ndash;Pearson)"),
-          value    = textOutput("snap_ci"),
-          showcase = bsicons::bs_icon("bar-chart"),
-          theme    = "info"
         ),
         value_box(
           title    = "E-Value",
@@ -242,12 +236,26 @@ ui <- page_sidebar(
           value    = textOutput("snap_inv_e"),
           showcase = bsicons::bs_icon("shield-check"),
           theme    = "secondary"
-        ),
-        value_box(
-          title    = "One-Sided p-value",
-          value    = textOutput("snap_pval"),
-          showcase = bsicons::bs_icon("calculator"),
-          theme    = "secondary"
+        )
+      ),
+      card(
+        card_header(htmltools::HTML("Classical Frequentist Results")),
+        card_body(
+          tags$table(
+            class = "table table-sm table-borderless",
+            tags$tbody(
+              tags$tr(
+                tags$td(class = "text-muted small pe-3", "One-Sided p-value:"),
+                tags$td(tags$strong(textOutput("snap_pval_cell")))
+              ),
+              tags$tr(
+                tags$td(class = "text-muted small pe-3", htmltools::HTML("95% CI (Clopper&ndash;Pearson):")),
+                tags$td(tags$strong(textOutput("snap_ci_cell")))
+              )
+            )
+          ),
+          tags$small(class = "text-muted fst-italic d-block mt-2",
+            "H\u2080: p = p\u2080 vs H\u2081: p > p\u2080  (exact binomial test)")
         )
       ),
       card(
@@ -306,18 +314,12 @@ ui <- page_sidebar(
         )
       ),
       layout_column_wrap(
-        width = 1/4, fill = FALSE,
+        width = 1/3, fill = FALSE,
         value_box(
           title    = "Final Observed Rate",
           value    = textOutput("seq_rate"),
           showcase = bsicons::bs_icon("percent"),
           theme    = "primary"
-        ),
-        value_box(
-          title    = htmltools::HTML("95% CI (Clopper&ndash;Pearson)"),
-          value    = textOutput("seq_ci"),
-          showcase = bsicons::bs_icon("bar-chart"),
-          theme    = "info"
         ),
         value_box(
           title    = "Final E-Value",
@@ -330,12 +332,26 @@ ui <- page_sidebar(
           value    = textOutput("seq_inv_e"),
           showcase = bsicons::bs_icon("shield-check"),
           theme    = "secondary"
-        ),
-        value_box(
-          title    = "One-Sided p-value",
-          value    = textOutput("seq_pval"),
-          showcase = bsicons::bs_icon("calculator"),
-          theme    = "secondary"
+        )
+      ),
+      card(
+        card_header(htmltools::HTML("Classical Frequentist Results")),
+        card_body(
+          tags$table(
+            class = "table table-sm table-borderless",
+            tags$tbody(
+              tags$tr(
+                tags$td(class = "text-muted small pe-3", "One-Sided p-value:"),
+                tags$td(tags$strong(textOutput("seq_pval_cell")))
+              ),
+              tags$tr(
+                tags$td(class = "text-muted small pe-3", htmltools::HTML("95% CI (Clopper&ndash;Pearson):")),
+                tags$td(tags$strong(textOutput("seq_ci_cell")))
+              )
+            )
+          ),
+          tags$small(class = "text-muted fst-italic d-block mt-2",
+            "H\u2080: p = p\u2080 vs H\u2081: p > p\u2080  (exact binomial test)")
         )
       ),
       card(
@@ -490,17 +506,17 @@ server <- function(input, output, session) {
          dec = dec, eff_thresh = eff_thresh, fut_thresh = fut_thresh)
   })
 
-  output$snap_rate  <- renderText({
+  output$snap_rate      <- renderText({
     s <- snap()
     if (is.na(s$rate)) "\u2014" else sprintf("%.1f%%", 100 * s$rate)
   })
-  output$snap_ci    <- renderText({
+  output$snap_pval_cell <- renderText({ fmt_pval(snap()$pval) })
+  output$snap_ci_cell   <- renderText({
     s <- snap()
     if (any(is.na(s$ci))) "\u2014" else sprintf("(%.3f, %.3f)", s$ci[1], s$ci[2])
   })
   output$snap_e     <- renderText({ sprintf("%.4f", snap()$e) })
   output$snap_inv_e <- renderText({ sprintf("%.4f", 1 / snap()$e) })
-  output$snap_pval  <- renderText({ fmt_pval(snap()$pval) })
 
   output$snap_decision <- renderUI({
     s <- snap()
@@ -656,14 +672,14 @@ server <- function(input, output, session) {
     )
   })
 
-  output$seq_rate   <- renderText({ s <- seq_sum(); sprintf("%.1f%%", 100 * s$rate) })
-  output$seq_ci     <- renderText({
+  output$seq_rate      <- renderText({ s <- seq_sum(); sprintf("%.1f%%", 100 * s$rate) })
+  output$seq_pval_cell <- renderText({ fmt_pval(seq_sum()$pval) })
+  output$seq_ci_cell   <- renderText({
     s <- seq_sum()
     if (any(is.na(s$ci))) "\u2014" else sprintf("(%.3f, %.3f)", s$ci[1], s$ci[2])
   })
   output$seq_e      <- renderText({ sprintf("%.4f", seq_sum()$e) })
   output$seq_inv_e  <- renderText({ sprintf("%.4f", 1 / seq_sum()$e) })
-  output$seq_pval   <- renderText({ fmt_pval(seq_sum()$pval) })
 
   output$seq_decision <- renderUI({
     s <- seq_sum()
