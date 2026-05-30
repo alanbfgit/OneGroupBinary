@@ -1,136 +1,210 @@
-# OneGroupBinary
+# One-Group Binary Response Trial Design Tool
 
-**Simon's Two-Stage Design with Bayesian Posterior Analysis**  
-*A Shiny application for single-arm Phase II oncology trials*
+A comprehensive Shiny application for designing and analyzing single-arm clinical trials with binary response outcomes (e.g., Phase II oncology trials). This tool implements multiple design methods and provides interactive visualizations for design operating characteristics and Bayesian posterior probability calculations.
 
----
+## Features
 
-## Overview
+### 1. **Simon's Two-Stage Design** (Tab 1)
+Classical frequentist design for single-arm trials with binary endpoints.
 
-This Shiny app implements **Simon's Two-Stage design** for single-arm Phase II clinical trials with a binary endpoint (e.g., tumour response). It is intended for settings where the primary goal is to decide whether a treatment's response rate is promising enough to warrant further study.
-
-The app provides:
-
-- **Optimal and MiniMax** two-stage design parameters via the `clinfun` package
-- **Bayesian posterior analysis** of the observed response rate using a conjugate Beta–Binomial model
-- Interactive decision rules with posterior probabilities at each design boundary
-
----
-
-## Design Background
-
-Simon's Two-Stage design (Simon, 1989) controls both:
-
-- **Type I error (α):** the probability of declaring an inactive treatment promising
-- **Type II error (β):** the probability of failing to detect an active treatment
-
-Two criteria are supported:
-
-| Criterion | Minimises |
-|-----------|-----------|
-| **Optimal** | Expected sample size under *p₀* (useful when early stopping is likely) |
-| **MiniMax** | Maximum total sample size |
-
-### Stopping Rule
-
-1. Enroll **n₁** patients in Stage 1.  
-   - If responses ≤ **r₁**, stop early — the treatment is not sufficiently active.  
-   - Otherwise, continue to Stage 2.
-2. Enroll the remaining patients (total **N**).  
-   - If total responses > **r**, declare the treatment **promising**.  
-   - Otherwise, conclude it does not meet the target activity level.
+- **Parameters:**
+  - Undesirable response rate (p₀): null hypothesis
+  - Acceptable response rate (p₁): alternative hypothesis
+  - Type I error (α)
+  - Power (1 - β)
+  
+- **Design Options:**
+  - **Optimal**: Minimizes expected sample size under p₀
+  - **MiniMax**: Minimizes maximum sample size (n)
+  
+- **Outputs:**
+  - Stage 1 and total sample sizes
+  - Stopping thresholds (r₁ and r)
+  - Operating characteristics (EN, PET)
+  - Decision rules with posterior probability calculations
 
 ---
 
-## Bayesian Posterior Analysis
+### 2. **Posterior Distribution Visualization** (Tab 2)
+Interactive Bayesian analysis of observed data using a Beta prior.
 
-Alongside the frequentist Simon design, the app fits a **Beta–Binomial conjugate model**:
-
-$$
-p \sim \text{Beta}(\alpha_0, \beta_0) \quad \text{(prior)}
-$$
-
-$$
-p \mid a, n \sim \text{Beta}(\alpha_0 + a,\ \beta_0 + n - a) \quad \text{(posterior)}
-$$
-
-where *a* is the number of observed responses and *n* is the total number of observations.
-
-The default prior `Beta(1, 1)` is uniform (non-informative). Custom priors can encode historical data or clinical belief.
-
-Key posterior summaries reported:
-
-- **P(p ≤ p₀ | data)** — probability the true rate is undesirably low
-- **P(p ≥ p₁ | data)** — probability the true rate meets the target
+- **Inputs:**
+  - Total observations (n)
+  - Observed successes (a)
+  - Beta prior parameters (α, β) — default Beta(1,1) is uniform
+  
+- **Outputs:**
+  - Posterior Beta distribution
+  - P(p ≤ p₀ | data) and P(p ≥ p₁ | data)
+  - Visualization with prior overlay, thresholds, and region shading
 
 ---
 
-## App Features
+### 3. **Thall & Simon Bayesian Sequential Design** (Tab 3)
+Adaptive Bayesian design with interim analyses and stopping boundaries.
 
-- **Simon Design tab:** value boxes for stage-1 and final thresholds, full design table, and plain-language decision rules with posterior probabilities at each boundary.
-- **Posterior Distribution tab:** interactive sliders for observed data (n, successes), shaded posterior density plot with regions colour-coded relative to p₀ and p₁, overlaid prior density (dashed line), and posterior probability value boxes.
+- **Parameters:**
+  - Maximum sample size (N)
+  - Cohort size for interim looks
+  - Futility threshold: P(p > p₀ | data)
+  - Efficacy threshold: P(p > p₀ | data)
+  
+- **Outputs:**
+  - Stopping boundaries table
+  - Operating characteristics from 5,000 simulations:
+    - Type I error and power
+    - Expected sample size (ESS) under null and alternative
+    - Probability of early stopping
+
+---
+
+### 4. **Bayesian Sequential Design with Threshold Calibration** (Tab 4)
+Fully calibrated Bayesian design using grid search to find optimal stopping thresholds.
+
+- **Process:**
+  - Automatically searches grid of efficacy (u) and futility (l) thresholds
+  - Calibrates to match target Type I error and power
+  - Performs 5,000 confirmatory simulations
+  
+- **Outputs:**
+  - Calibrated boundary plot with expected trajectories
+  - Operating characteristics under H₀ and H₁
+  - Real-time decision tool for observed data:
+    - Sequential decision (stop for efficacy, futility, or continue)
+    - Posterior probability calculation
+    - Visual boundary comparison
 
 ---
 
 ## Installation
 
+### Requirements
+- R 4.0+
+- Shiny, bslib (Bootstrap 5 UI framework)
+- clinfun (for Simon's two-stage design calculations)
+- ggplot2, dplyr, scales
+- bsicons (Bootstrap icons)
+
+### Setup
 ```r
-# Install required packages if not already present
-install.packages(c("shiny", "bslib", "bsicons", "ggplot2", "dplyr",
-                   "scales", "clinfun"))
+# Install required packages
+pkgs <- c("shiny", "bslib", "clinfun", "ggplot2", "dplyr", "scales", "bsicons")
+install.packages(pkgs)
+
+# Run the app
+shiny::runApp("One_Group_Binary_v1.R")
 ```
 
----
-
-## Usage
-
-```r
-shiny::runApp("simon2stage_app_v2.R")
-```
-
-Or open `simon2stage_app_v2.R` in RStudio and click **Run App**.
-
-### Input Parameters
-
-| Parameter | Description |
-|-----------|-------------|
-| **p₀** | Undesirable (null) response rate |
-| **p₁** | Acceptable (target) response rate |
-| **α** | Type I error rate |
-| **1 − β** | Power |
-| **Design criterion** | Optimal or MiniMax |
-| **Beta prior (α, β)** | Prior on the response rate; default Beta(1,1) is uniform |
+Alternatively, use RStudio to open the file and click **"Run App"**.
 
 ---
 
-## Dependencies
+## Usage Guide
 
-| Package | Purpose |
-|---------|---------|
-| `shiny` | Web application framework |
-| `bslib` | Bootstrap 5 UI components and theming |
-| `bsicons` | Bootstrap icons |
-| `clinfun` | Simon two-stage design calculations (`ph2simon`) |
-| `ggplot2` | Posterior density plot |
-| `dplyr` | Data wrangling inside plot |
-| `scales` | Axis label formatting |
+### Basic Workflow
+
+1. **Set Design Parameters** (Sidebar)
+   - Specify p₀ (undesirable rate), p₁ (acceptable rate)
+   - Set α (Type I error) and power (1 - β)
+   - Choose prior: Beta(α, β) for posterior calculations
+   
+2. **Select Design Method** (Tabs 1-4)
+   - **Tab 1**: Use Simon's design for classical frequentist planning
+   - **Tab 2**: Visualize posterior with sample data to understand Bayesian inference
+   - **Tab 3**: Set up adaptive trial with fixed interim looks
+   - **Tab 4**: Calibrate thresholds for fully adaptive monitoring
+
+3. **Interpret Results**
+   - Review decision rules and operating characteristics
+   - Use decision boundary plots to understand sample paths
+   - Monitor real observed data using the sequential decision tool (Tab 4)
+
+### Example: Phase II Lung Cancer Trial
+- **p₀ = 0.20** (undesirable response rate)
+- **p₁ = 0.40** (acceptable response rate)
+- **α = 0.10, Power = 0.90**
+- **Prior**: Beta(1, 1) (uninformative)
+
+**Simon Optimal Design Result:**
+- Stage 1: Enroll 23 patients; stop if ≤ 3 responses
+- Stage 2: Enroll 19 more patients (total 42)
+- Declare promising if > 10 total responses
 
 ---
 
-## Reference
+## Key Concepts
 
-Simon R. (1989). Optimal two-stage designs for phase II clinical trials. *Controlled Clinical Trials*, **10**(1), 1–10. https://doi.org/10.1016/0197-2456(89)90015-9
+### Posterior Probability Interpretation
+The posterior probability P(p > p₀ | data) combines:
+- **Prior belief** about the true response rate (Beta prior)
+- **Observed data** (number of successes and failures)
+
+This provides a direct probability statement about the parameter, useful for decision-making.
+
+### Operating Characteristics
+- **Type I Error**: False positive rate (probability of success when treatment is inactive, p = p₀)
+- **Power**: True positive rate (probability of success when treatment is active, p = p₁)
+- **ESS**: Expected number of patients enrolled (useful for planning)
+- **PET**: Probability of early termination under p₀
+
+### Bayesian Adaptive Designs
+Provide efficiency through:
+- **Continuous monitoring**: Evaluate after each patient
+- **Early stopping**: Declare efficacy or futility without enrolling all N patients
+- **Flexible thresholds**: Boundaries adjust to maintain Type I error control
 
 ---
 
+## Technical Details
 
-## Git Update Note  
-Going forward, whenever we change the code just run these two lines in the terminal to sync:  
+### Simon's Two-Stage Design
+Calculated using `clinfun::ph2simon()`. Returns all designs meeting power and Type I error constraints; app selects either Optimal (min EN) or MiniMax (min N).
 
-git add simon2stage_app_v2.R  
-git commit -m "your message" && git push origin main  
+### Bayesian Sequential Design Calibration (Tab 4)
+- **Grid search**: Tests 77 combinations of (u, l) thresholds
+- **Each cell**: 2,000 simulations under both H₀ and H₁
+- **Selection criterion**: Minimize |Type I error - α| + |Power - (1-β)|
+- **Confirmation**: Final 5,000 simulations at best (u, l)
 
+---
 
-## Author
+## File Information
 
-Alan Forsythe — Forsythe and Bear LLC, 2026
+- **File**: `One_Group_Binary_v1.R`
+- **Language**: R with Shiny
+- **UI Framework**: Bootstrap 5 (bslib)
+- **Lines of Code**: ~1,180
+- **Author**: Genelux - Forsythe 2026
+
+---
+
+## References
+
+1. **Simon R** (1989). Optimal two-stage designs for phase II clinical trials. Controlled Clinical Trials, 10(1), 1-10.
+
+2. **Thall PF & Simon R** (1994). Practical Bayesian guidelines for phase IIb clinical trials. Biometrics, 50(2), 337-349.
+
+3. **Fleiss JL, Levin B, Paik MC** (2003). Statistical Methods for Rates and Proportions (3rd ed.). Wiley.
+
+---
+
+## License
+
+This tool is provided for educational and research purposes. For regulatory submissions, consult with biostatisticians and regulatory affairs specialists.
+
+---
+
+## Support & Contributions
+
+For questions, bug reports, or feature requests, please open an issue or contact the development team.
+
+**Repository**: [alanbfgit](https://github.com/alanbfgit/One-Group-Binary)
+
+---
+
+## Citation
+
+If you use this tool in your research, please cite:
+
+> Forsythe A. (2026). One-Group Binary Response Trial Design Tool. R Shiny Application. Genelux.
+
