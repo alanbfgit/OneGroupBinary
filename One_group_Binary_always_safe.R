@@ -239,27 +239,8 @@ ui <- page_sidebar(
         )
       ),
       card(
-        card_header(htmltools::HTML("Classical Frequentist Results")),
-        card_body(
-          tags$table(
-            class = "table table-sm table-borderless",
-            tags$tbody(
-              tags$tr(
-                tags$td(class = "text-muted small pe-3", "One-Sided p-value:"),
-                tags$td(tags$strong(textOutput("snap_pval_cell")))
-              ),
-              tags$tr(
-                tags$td(class = "text-muted small pe-3", htmltools::HTML("95% CI (Clopper&ndash;Pearson):")),
-                tags$td(tags$strong(textOutput("snap_ci_cell")))
-              )
-            )
-          ),
-          tags$small(class = "text-muted fst-italic d-block mt-2",
-            "H\u2080: p = p\u2080 vs H\u2081: p > p\u2080  (exact binomial test)")
-        ),
-        card_footer(tags$small(tags$em(
-          "Classical exact binomial test: one-sided p-value and Clopper\u2013Pearson 95% confidence interval."
-        )))
+        card_header("Classical Frequentist Results"),
+        card_body(uiOutput("snap_freq_results"))
       ),
       card(
         card_header("Results Summary"),
@@ -338,27 +319,8 @@ ui <- page_sidebar(
         )
       ),
       card(
-        card_header(htmltools::HTML("Classical Frequentist Results")),
-        card_body(
-          tags$table(
-            class = "table table-sm table-borderless",
-            tags$tbody(
-              tags$tr(
-                tags$td(class = "text-muted small pe-3", "One-Sided p-value:"),
-                tags$td(tags$strong(textOutput("seq_pval_cell")))
-              ),
-              tags$tr(
-                tags$td(class = "text-muted small pe-3", htmltools::HTML("95% CI (Clopper&ndash;Pearson):")),
-                tags$td(tags$strong(textOutput("seq_ci_cell")))
-              )
-            )
-          ),
-          tags$small(class = "text-muted fst-italic d-block mt-2",
-            "H\u2080: p = p\u2080 vs H\u2081: p > p\u2080  (exact binomial test)")
-        ),
-        card_footer(tags$small(tags$em(
-          "Classical exact binomial test: one-sided p-value and Clopper\u2013Pearson 95% confidence interval."
-        )))
+        card_header("Classical Frequentist Results"),
+        card_body(uiOutput("seq_freq_results"))
       ),
       card(
         full_screen = TRUE,
@@ -516,10 +478,28 @@ server <- function(input, output, session) {
     s <- snap()
     if (is.na(s$rate)) "\u2014" else sprintf("%.1f%%", 100 * s$rate)
   })
-  output$snap_pval_cell <- renderText({ fmt_pval(snap()$pval) })
-  output$snap_ci_cell   <- renderText({
-    s <- snap()
-    if (any(is.na(s$ci))) "\u2014" else sprintf("(%.3f, %.3f)", s$ci[1], s$ci[2])
+  output$snap_freq_results <- renderUI({
+    s   <- snap()
+    ci  <- if (any(is.na(s$ci))) "\u2014" else sprintf("(%.3f, %.3f)", s$ci[1], s$ci[2])
+    pv  <- fmt_pval(s$pval)
+    tagList(
+      tags$table(
+        class = "table table-sm table-borderless mb-1",
+        tags$tbody(
+          tags$tr(
+            tags$td(class = "text-muted small pe-4", "One-sided p-value"),
+            tags$td(tags$strong(pv))
+          ),
+          tags$tr(
+            tags$td(class = "text-muted small pe-4",
+                    htmltools::HTML("95% CI (Clopper&ndash;Pearson)")),
+            tags$td(tags$strong(ci))
+          )
+        )
+      ),
+      tags$small(class = "text-muted fst-italic",
+        htmltools::HTML("H\u2080: p = p\u2080 vs H\u2081: p &gt; p\u2080  (exact binomial test)"))
+    )
   })
   output$snap_e     <- renderText({ sprintf("%.4f", snap()$e) })
   output$snap_inv_e <- renderText({ sprintf("%.4f", 1 / snap()$e) })
@@ -679,10 +659,28 @@ server <- function(input, output, session) {
   })
 
   output$seq_rate      <- renderText({ s <- seq_sum(); sprintf("%.1f%%", 100 * s$rate) })
-  output$seq_pval_cell <- renderText({ fmt_pval(seq_sum()$pval) })
-  output$seq_ci_cell   <- renderText({
-    s <- seq_sum()
-    if (any(is.na(s$ci))) "\u2014" else sprintf("(%.3f, %.3f)", s$ci[1], s$ci[2])
+  output$seq_freq_results <- renderUI({
+    s   <- seq_sum()
+    ci  <- if (any(is.na(s$ci))) "\u2014" else sprintf("(%.3f, %.3f)", s$ci[1], s$ci[2])
+    pv  <- fmt_pval(s$pval)
+    tagList(
+      tags$table(
+        class = "table table-sm table-borderless mb-1",
+        tags$tbody(
+          tags$tr(
+            tags$td(class = "text-muted small pe-4", "One-sided p-value"),
+            tags$td(tags$strong(pv))
+          ),
+          tags$tr(
+            tags$td(class = "text-muted small pe-4",
+                    htmltools::HTML("95% CI (Clopper&ndash;Pearson)")),
+            tags$td(tags$strong(ci))
+          )
+        )
+      ),
+      tags$small(class = "text-muted fst-italic",
+        htmltools::HTML("H\u2080: p = p\u2080 vs H\u2081: p &gt; p\u2080  (exact binomial test)"))
+    )
   })
   output$seq_e      <- renderText({ sprintf("%.4f", seq_sum()$e) })
   output$seq_inv_e  <- renderText({ sprintf("%.4f", 1 / seq_sum()$e) })
